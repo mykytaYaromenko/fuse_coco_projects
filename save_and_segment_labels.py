@@ -1,17 +1,17 @@
 import os
+
+import numpy as np
+
 from utils import import_coco_config
 import cv2
 import sys
 
-def _segment_image(image_path: str, annotation: dict, output_path: str) -> None:
+def _segment_image(image_path: str, annotation: dict) -> np.ndarray:
     image = cv2.imread(image_path)
     x, y, w, h = map(int, annotation["bbox"])
-    print(x, y, w, h)
     cropped_image = image[y:y+h, x:x+w]
 
-    category_path = os.path.join(output_path)
-    base_name = os.path.basename(image_path)
-    cv2.imwrite(os.path.join(category_path, base_name), cropped_image)
+    return cropped_image
 
 
 def save_and_segment_labels(path_to_project: str, output_path: str) -> None:
@@ -25,14 +25,23 @@ def save_and_segment_labels(path_to_project: str, output_path: str) -> None:
     for category in categories:
         os.makedirs(os.path.join(output_path, category["name"]), exist_ok=True)
 
-    for annotation in annotations:
-        category_name = next(cat["name"] for cat in categories if cat["id"] == annotation["category_id"])
-        category_path = os.path.join(output_path, category_name)
+    count_of_saved_objects = 0
+    for idx, annotation in enumerate(annotations):
+        try:
+            category_name = next(cat["name"] for cat in categories if cat["id"] == annotation["category_id"])
+            category_path = os.path.join(output_path, category_name)
 
-        image_path = os.path.join(path_to_project, next(img["file_name"] for img in image_paths if img["id"] == annotation["image_id"]))
-
-        _segment_image(image_path, annotation, category_path, category_name)
-
+            image_path = os.path.join(path_to_project, next(img["file_name"] for img in image_paths if img["id"] == annotation["image_id"])).replace("\\", "/")
+            base_name = os.path.basename(image_path).replace(".jpeg","") + f"_{annotation['id']}.jpeg"
+            segmented_object = _segment_image(image_path, annotation)
+            path_to_save = os.path.join(category_path, base_name)
+            cv2.imwrite(path_to_save, segmented_object)
+            print(f"Saved object {idx}/{len(annotations)} to {path_to_save}")
+            count_of_saved_objects += 1
+        except:
+            print("Error in annotation for image: ", annotation["image_id"])
+            continue
+    print(f"Saved {count_of_saved_objects}/{len(annotations)} objects")
 
 if __name__ == "__main__":
     path_to_project = sys.argv[1]
